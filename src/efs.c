@@ -34,6 +34,7 @@
 #define _XOPEN_SOURCE 500
 #endif
 
+#include <stdlib.h>
 #include <fuse.h>
 #include <stdio.h>
 #include <string.h>
@@ -42,15 +43,30 @@
 #include <dirent.h>
 #include <errno.h>
 #include <sys/time.h>
+#include <limits.h>
 #ifdef HAVE_SETXATTR
 #include <sys/xattr.h>
 #endif
 
+
+typedef struct {
+	char*  root_dir;
+} efs_data_t;
+
+#define EFS_DATA ((efs_data_t *) fuse_get_context()->private_data)
+
+static void efs_fullpath(char fpath[PATH_MAX], const char *path)
+{
+	strncpy(fpath, EFS_DATA->root_dir, PATH_MAX);
+	strncat(fpath, path, PATH_MAX);
+}
+
 static int efs_getattr(const char *path, struct stat *stbuf)
 {
 	int res;
-
-	res = lstat(path, stbuf);
+	char fpath[PATH_MAX];
+	efs_fullpath(fpath, path);
+	res = lstat(fpath, stbuf);
 	if (res == -1)
 		return -errno;
 
@@ -60,8 +76,9 @@ static int efs_getattr(const char *path, struct stat *stbuf)
 static int efs_access(const char *path, int mask)
 {
 	int res;
-
-	res = access(path, mask);
+	char fpath[PATH_MAX];
+	efs_fullpath(fpath, path);
+	res = access(fpath, mask);
 	if (res == -1)
 		return -errno;
 
@@ -72,7 +89,9 @@ static int efs_readlink(const char *path, char *buf, size_t size)
 {
 	int res;
 
-	res = readlink(path, buf, size - 1);
+	char fpath[PATH_MAX];
+	efs_fullpath(fpath, path);
+	res = readlink(fpath, buf, size - 1);
 	if (res == -1)
 		return -errno;
 
@@ -90,7 +109,9 @@ static int efs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 	(void) offset;
 	(void) fi;
 
-	dp = opendir(path);
+	char fpath[PATH_MAX];
+	efs_fullpath(fpath, path);
+	dp = opendir(fpath);
 	if (dp == NULL)
 		return -errno;
 
@@ -110,17 +131,18 @@ static int efs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 static int efs_mknod(const char *path, mode_t mode, dev_t rdev)
 {
 	int res;
-
+	char fpath[PATH_MAX];
+	efs_fullpath(fpath, path);
 	/* On Linux this could just be 'mknod(path, mode, rdev)' but this
 	   is more portable */
 	if (S_ISREG(mode)) {
-		res = open(path, O_CREAT | O_EXCL | O_WRONLY, mode);
+		res = open(fpath, O_CREAT | O_EXCL | O_WRONLY, mode);
 		if (res >= 0)
 			res = close(res);
 	} else if (S_ISFIFO(mode))
-		res = mkfifo(path, mode);
+		res = mkfifo(fpath, mode);
 	else
-		res = mknod(path, mode, rdev);
+		res = mknod(fpath, mode, rdev);
 	if (res == -1)
 		return -errno;
 
@@ -130,8 +152,9 @@ static int efs_mknod(const char *path, mode_t mode, dev_t rdev)
 static int efs_mkdir(const char *path, mode_t mode)
 {
 	int res;
-
-	res = mkdir(path, mode);
+	char fpath[PATH_MAX];
+	efs_fullpath(fpath, path);
+	res = mkdir(fpath, mode);
 	if (res == -1)
 		return -errno;
 
@@ -141,8 +164,9 @@ static int efs_mkdir(const char *path, mode_t mode)
 static int efs_unlink(const char *path)
 {
 	int res;
-
-	res = unlink(path);
+	char fpath[PATH_MAX];
+	efs_fullpath(fpath, path);
+	res = unlink(fpath);
 	if (res == -1)
 		return -errno;
 
@@ -152,8 +176,9 @@ static int efs_unlink(const char *path)
 static int efs_rmdir(const char *path)
 {
 	int res;
-
-	res = rmdir(path);
+	char fpath[PATH_MAX];
+	efs_fullpath(fpath, path);
+	res = rmdir(fpath);
 	if (res == -1)
 		return -errno;
 
@@ -163,8 +188,11 @@ static int efs_rmdir(const char *path)
 static int efs_symlink(const char *from, const char *to)
 {
 	int res;
-
-	res = symlink(from, to);
+	char ffrom[PATH_MAX];
+	char fto[PATH_MAX];
+	efs_fullpath(ffrom, from);
+	efs_fullpath(fto, to);
+	res = symlink(ffrom, fto);
 	if (res == -1)
 		return -errno;
 
@@ -174,8 +202,11 @@ static int efs_symlink(const char *from, const char *to)
 static int efs_rename(const char *from, const char *to)
 {
 	int res;
-
-	res = rename(from, to);
+	char ffrom[PATH_MAX];
+	char fto[PATH_MAX];
+	efs_fullpath(ffrom, from);
+	efs_fullpath(fto, to);
+	res = rename(ffrom, fto);
 	if (res == -1)
 		return -errno;
 
@@ -185,8 +216,11 @@ static int efs_rename(const char *from, const char *to)
 static int efs_link(const char *from, const char *to)
 {
 	int res;
-
-	res = link(from, to);
+	char ffrom[PATH_MAX];
+	char fto[PATH_MAX];
+	efs_fullpath(ffrom, from);
+	efs_fullpath(fto, to);
+	res = link(ffrom, fto);
 	if (res == -1)
 		return -errno;
 
@@ -196,8 +230,9 @@ static int efs_link(const char *from, const char *to)
 static int efs_chmod(const char *path, mode_t mode)
 {
 	int res;
-
-	res = chmod(path, mode);
+	char fpath[PATH_MAX];
+	efs_fullpath(fpath, path);
+	res = chmod(fpath, mode);
 	if (res == -1)
 		return -errno;
 
@@ -207,8 +242,9 @@ static int efs_chmod(const char *path, mode_t mode)
 static int efs_chown(const char *path, uid_t uid, gid_t gid)
 {
 	int res;
-
-	res = lchown(path, uid, gid);
+	char fpath[PATH_MAX];
+	efs_fullpath(fpath, path);
+	res = lchown(fpath, uid, gid);
 	if (res == -1)
 		return -errno;
 
@@ -218,8 +254,9 @@ static int efs_chown(const char *path, uid_t uid, gid_t gid)
 static int efs_truncate(const char *path, off_t size)
 {
 	int res;
-
-	res = truncate(path, size);
+	char fpath[PATH_MAX];
+	efs_fullpath(fpath, path);
+	res = truncate(fpath, size);
 	if (res == -1)
 		return -errno;
 
@@ -235,8 +272,10 @@ static int efs_utimens(const char *path, const struct timespec ts[2])
 	tv[0].tv_usec = ts[0].tv_nsec / 1000;
 	tv[1].tv_sec = ts[1].tv_sec;
 	tv[1].tv_usec = ts[1].tv_nsec / 1000;
-
-	res = utimes(path, tv);
+	
+	char fpath[PATH_MAX];
+	efs_fullpath(fpath, path);
+	res = utimes(fpath, tv);
 	if (res == -1)
 		return -errno;
 
@@ -246,8 +285,9 @@ static int efs_utimens(const char *path, const struct timespec ts[2])
 static int efs_open(const char *path, struct fuse_file_info *fi)
 {
 	int res;
-
-	res = open(path, fi->flags);
+	char fpath[PATH_MAX];
+	efs_fullpath(fpath, path);
+	res = open(fpath, fi->flags);
 	if (res == -1)
 		return -errno;
 
@@ -262,7 +302,9 @@ static int efs_read(const char *path, char *buf, size_t size, off_t offset,
 	int res;
 
 	(void) fi;
-	fd = open(path, O_RDONLY);
+	char fpath[PATH_MAX];
+	efs_fullpath(fpath, path);
+	fd = open(fpath, O_RDONLY);
 	if (fd == -1)
 		return -errno;
 
@@ -281,7 +323,9 @@ static int efs_write(const char *path, const char *buf, size_t size,
 	int res;
 
 	(void) fi;
-	fd = open(path, O_WRONLY);
+	char fpath[PATH_MAX];
+	efs_fullpath(fpath, path);
+	fd = open(fpath, O_WRONLY);
 	if (fd == -1)
 		return -errno;
 
@@ -296,8 +340,9 @@ static int efs_write(const char *path, const char *buf, size_t size,
 static int efs_statfs(const char *path, struct statvfs *stbuf)
 {
 	int res;
-
-	res = statvfs(path, stbuf);
+	char fpath[PATH_MAX];
+	efs_fullpath(fpath, path);
+	res = statvfs(fpath, stbuf);
 	if (res == -1)
 		return -errno;
 
@@ -307,9 +352,11 @@ static int efs_statfs(const char *path, struct statvfs *stbuf)
 static int efs_create(const char* path, mode_t mode, struct fuse_file_info* fi) {
 
     (void) fi;
-
+	
+	char fpath[PATH_MAX];
+	efs_fullpath(fpath, path);
     int res;
-    res = creat(path, mode);
+    res = creat(fpath, mode);
     if(res == -1)
 	return -errno;
 
@@ -345,7 +392,9 @@ static int efs_fsync(const char *path, int isdatasync,
 static int efs_setxattr(const char *path, const char *name, const char *value,
 			size_t size, int flags)
 {
-	int res = lsetxattr(path, name, value, size, flags);
+	char fpath[PATH_MAX];
+	efs_fullpath(fpath, path);
+	int res = lsetxattr(fpath, name, value, size, flags);
 	if (res == -1)
 		return -errno;
 	return 0;
@@ -354,7 +403,9 @@ static int efs_setxattr(const char *path, const char *name, const char *value,
 static int efs_getxattr(const char *path, const char *name, char *value,
 			size_t size)
 {
-	int res = lgetxattr(path, name, value, size);
+	char fpath[PATH_MAX];
+	efs_fullpath(fpath, path);
+	int res = lgetxattr(fpath, name, value, size);
 	if (res == -1)
 		return -errno;
 	return res;
@@ -362,7 +413,9 @@ static int efs_getxattr(const char *path, const char *name, char *value,
 
 static int efs_listxattr(const char *path, char *list, size_t size)
 {
-	int res = llistxattr(path, list, size);
+	char fpath[PATH_MAX];
+	efs_fullpath(fpath, path);
+	int res = llistxattr(fpath, list, size);
 	if (res == -1)
 		return -errno;
 	return res;
@@ -370,7 +423,9 @@ static int efs_listxattr(const char *path, char *list, size_t size)
 
 static int efs_removexattr(const char *path, const char *name)
 {
-	int res = lremovexattr(path, name);
+	char fpath[PATH_MAX];
+	efs_fullpath(fpath, path);
+	int res = lremovexattr(fpath, name);
 	if (res == -1)
 		return -errno;
 	return 0;
@@ -411,5 +466,16 @@ static struct fuse_operations efs_oper = {
 int main(int argc, char *argv[])
 {
 	umask(0);
-	return fuse_main(argc, argv, &efs_oper, NULL);
+	efs_data_t *efs_data;
+	efs_data = malloc(sizeof(efs_data_t));
+	if (argc < 3)
+	{
+		printf("error\n");
+		return;
+	}
+	efs_data->root_dir = realpath(argv[argc-2], NULL);
+    argv[argc-2] = argv[argc-1];
+    argv[argc-1] = NULL;
+    argc--;
+	return fuse_main(argc, argv, &efs_oper, efs_data);
 }
