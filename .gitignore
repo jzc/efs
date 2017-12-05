@@ -1,5 +1,9 @@
 obj
 fusehello
+src/fusehello.c
 fusexmp
+src/fusexmp.c
 xattr-util
 aes-crypt-util
+efs
+handout

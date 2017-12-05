@@ -26,15 +26,17 @@ OBJ=./obj
 
 .PHONY: all fuse-examples xattr-examples openssl-examples clean
 
-all: dir fuse-examples xattr-examples openssl-examples
+all: dir efs fuse-examples xattr-examples openssl-examples
 
 dir:
-	mkdir -p $(SRC)
-	mkdir -p $(OBJ)
+	@mkdir -p $(OBJ)
 
 fuse-examples: $(FUSE_EXAMPLES)
 xattr-examples: $(XATTR_EXAMPLES)
 openssl-examples: $(OPENSSL_EXAMPLES)
+
+efs: $(OBJ)/efs.o
+	$(CC) $(LFLAGS) $^ -o $@ $(LLIBSFUSE)
 
 fusehello: $(OBJ)/fusehello.o
 	$(CC) $(LFLAGS) $^ -o $@ $(LLIBSFUSE)
@@ -47,6 +49,9 @@ xattr-util: $(OBJ)/xattr-util.o
 
 aes-crypt-util: $(OBJ)/aes-crypt-util.o $(OBJ)/aes-crypt.o
 	$(CC) $(LFLAGS) $^ -o $@ $(LLIBSOPENSSL)
+
+$(OBJ)/efs.o: $(SRC)/efs.c
+	$(CC) $(CFLAGS) $(CFLAGSFUSE) $< -o $@
 
 $(OBJ)/fusehello.o: $(SRC)/fusehello.c
 	$(CC) $(CFLAGS) $(CFLAGSFUSE) $< -o $@
