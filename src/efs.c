@@ -324,8 +324,25 @@ static int efs_read(const char *path, char *buf, size_t size, off_t offset,
 static int efs_write(const char *path, const char *buf, size_t size,
 		     off_t offset, struct fuse_file_info *fi)
 {
+	// int fd;
+	// int res;
+
+	// (void) fi;
+	// char fpath[PATH_MAX];
+	// efs_fullpath(fpath, path);
+	// fd = open(fpath, O_WRONLY);
+	// if (fd == -1)
+	// 	return -errno;
+
+	// res = pwrite(fd, buf, size, offset);
+	// if (res == -1)
+	// 	res = -errno;
+
+	// close(fd);
+	// return res;
+
 	int fd;
-	int res;
+	int start;
 
 	(void) fi;
 	char fpath[PATH_MAX];
@@ -333,13 +350,17 @@ static int efs_write(const char *path, const char *buf, size_t size,
 	fd = open(fpath, O_WRONLY);
 	if (fd == -1)
 		return -errno;
-
-	res = pwrite(fd, buf, size, offset);
-	if (res == -1)
-		res = -errno;
-
+	FILE *fp_in = fmemopen( (void *)buf, size, "r");
+	FILE *fp_out = fdopen(fd, "w");
+	start = ftell(fp_out);
+	if (!do_crypt(fp_in, fp_out, 1, "abc"))
+	{
+		return -errno;
+	}
+	fclose(fp_out);
+	fclose(fp_in);
 	close(fd);
-	return res;
+	return ftell(fp_out) - start;
 }
 
 static int efs_statfs(const char *path, struct statvfs *stbuf)
