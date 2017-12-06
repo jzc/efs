@@ -304,17 +304,26 @@ static int efs_read(const char *path, char *buf, size_t size, off_t offset,
 {
 	int fd;
 	int start;
+	int valsize;
+	int mode = 0;
 
 	(void) fi;
+	char attr[128];
 	char fpath[PATH_MAX];
 	efs_fullpath(fpath, path);
+	valsize = getxattr(fpath, "user.encrypted", attr, 128);
+	attr[valsize] = '\0';
+	if (strcmp(attr, "0") == 0)
+	{
+		mode = -1;
+	}
 	fd = open(fpath, O_RDONLY);
 	if (fd == -1)
 		return -errno;
 	FILE *fp_in = fdopen(fd, "r");
 	FILE *fp_out = fmemopen(buf, size, "w");
 	start = ftell(fp_out);
-	do_crypt(fp_in, fp_out, 0, "abc");
+	do_crypt(fp_in, fp_out, mode, "abc");
 	fclose(fp_out);
 	fclose(fp_in);
 	close(fd);
@@ -324,23 +333,6 @@ static int efs_read(const char *path, char *buf, size_t size, off_t offset,
 static int efs_write(const char *path, const char *buf, size_t size,
 		     off_t offset, struct fuse_file_info *fi)
 {
-	// int fd;
-	// int res;
-
-	// (void) fi;
-	// char fpath[PATH_MAX];
-	// efs_fullpath(fpath, path);
-	// fd = open(fpath, O_WRONLY);
-	// if (fd == -1)
-	// 	return -errno;
-
-	// res = pwrite(fd, buf, size, offset);
-	// if (res == -1)
-	// 	res = -errno;
-
-	// close(fd);
-	// return res;
-
 	int fd;
 	int start;
 
