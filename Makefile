@@ -36,8 +36,8 @@ fuse-examples: $(FUSE_EXAMPLES)
 xattr-examples: $(XATTR_EXAMPLES)
 openssl-examples: $(OPENSSL_EXAMPLES)
 
-efs: $(OBJ)/efs.o
-	$(CC) $(LFLAGS) $^ -o $@ $(LLIBSFUSE)
+efs: $(OBJ)/efs.o $(OBJ)/aes-crypt.o
+	$(CC) $(LFLAGS) $^ -o $@ $(LLIBSFUSE) $(LLIBSOPENSSL)
 
 fusehello: $(OBJ)/fusehello.o
 	$(CC) $(LFLAGS) $^ -o $@ $(LLIBSFUSE)

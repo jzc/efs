@@ -22,6 +22,9 @@
 
 */
 
+// solves my problems
+#define _GNU_SOURCE
+
 #define FUSE_USE_VERSION 28
 #define HAVE_SETXATTR
 
@@ -48,6 +51,7 @@
 #include <sys/xattr.h>
 #endif
 
+#include "aes-crypt.h"
 
 typedef struct {
 	char*  root_dir;
@@ -299,7 +303,7 @@ static int efs_read(const char *path, char *buf, size_t size, off_t offset,
 		    struct fuse_file_info *fi)
 {
 	int fd;
-	int res;
+	int start;
 
 	(void) fi;
 	char fpath[PATH_MAX];
@@ -307,13 +311,14 @@ static int efs_read(const char *path, char *buf, size_t size, off_t offset,
 	fd = open(fpath, O_RDONLY);
 	if (fd == -1)
 		return -errno;
-
-	res = pread(fd, buf, size, offset);
-	if (res == -1)
-		res = -errno;
-
+	FILE *fp_in = fdopen(fd, "r");
+	FILE *fp_out = fmemopen(buf, size, "w");
+	start = ftell(fp_out);
+	do_crypt(fp_in, fp_out, 0, "abc");
+	fclose(fp_out);
+	fclose(fp_in);
 	close(fd);
-	return res;
+	return ftell(fp_out) - start;
 }
 
 static int efs_write(const char *path, const char *buf, size_t size,
