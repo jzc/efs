@@ -335,17 +335,26 @@ static int efs_write(const char *path, const char *buf, size_t size,
 {
 	int fd;
 	int start;
+	int valsize;
+	int mode = 1;
 
 	(void) fi;
+	char attr[128];
 	char fpath[PATH_MAX];
 	efs_fullpath(fpath, path);
+	valsize = getxattr(fpath, "user.encrypted", attr, 128);
+	attr[valsize] = '\0';
+	if (strcmp(attr, "0") == 0)
+	{
+		mode = -1;
+	}
 	fd = open(fpath, O_WRONLY);
 	if (fd == -1)
 		return -errno;
 	FILE *fp_in = fmemopen( (void *)buf, size, "r");
 	FILE *fp_out = fdopen(fd, "w");
 	start = ftell(fp_out);
-	if (!do_crypt(fp_in, fp_out, 1, "abc"))
+	if (!do_crypt(fp_in, fp_out, mode, "abc"))
 	{
 		return -errno;
 	}
