@@ -54,7 +54,8 @@
 #include "aes-crypt.h"
 
 typedef struct {
-	char*  root_dir;
+	char* root_dir;
+	char* tmp_dir;
 } efs_data_t;
 
 #define EFS_DATA ((efs_data_t *) fuse_get_context()->private_data)
@@ -63,6 +64,12 @@ static void efs_fullpath(char fpath[PATH_MAX], const char *path)
 {
 	strncpy(fpath, EFS_DATA->root_dir, PATH_MAX);
 	strncat(fpath, path, PATH_MAX);
+}
+
+static void efs_temppath(char tpath[PATH_MAX], const char* path)
+{
+	strncpy(tpath, EFS_DATA->tmp_dir, PATH_MAX);
+	strncat(tpath, path, PATH_MAX);
 }
 
 static int efs_getattr(const char *path, struct stat *stbuf)
@@ -302,40 +309,57 @@ static int efs_open(const char *path, struct fuse_file_info *fi)
 static int efs_read(const char *path, char *buf, size_t size, off_t offset,
 		    struct fuse_file_info *fi)
 {
-	int fd;
-	int start, end;
-	int valsize;
-	int mode = 0;
-
 	(void) fi;
-	char attr[128];
+	FILE *fp_in, *fp_out;
+	int fd;
+	int valsize;
+	int bytes_read;
+	int mode = 0;
+	printf("offset: %ld\n", offset);
+	
 	char fpath[PATH_MAX];
 	efs_fullpath(fpath, path);
+
+	char attr[128];
 	valsize = getxattr(fpath, "user.encrypted", attr, 128);
 	attr[valsize] = '\0';
 	if (strcmp(attr, "0") == 0)
 	{
 		mode = -1;
 	}
-	fd = open(fpath, O_RDONLY);
-	if (fd == -1)
-		return -errno;
-	FILE *fp_in = fdopen(fd, "r");
-	FILE *fp_out = fmemopen(buf, size, "w");
-	start = ftell(fp_out);
-	if (!do_crypt(fp_in, fp_out, mode, "abc"))
+	
+	char tpath[PATH_MAX];
+	efs_temppath(tpath, path);
+
+	if (access(tpath, F_OK) == -1)
 	{
-		return -errno;
+		fp_in = fopen(fpath, "r");
+		fp_out = fopen(tpath, "w");
+		do_crypt(fp_in, fp_out, mode, "abc");	
+		fclose(fp_in);
+		fclose(fp_out);
 	}
-	end = ftell(fp_out);
-	fclose(fp_out);
-	fclose(fp_in);
-	return end - start;
+
+	fd = open(tpath, O_RDONLY);
+	bytes_read = pread(fd, buf, size, offset);
+	
+	if ((long)(offset+size+1) >= lseek(fd, 0, SEEK_END))
+	{
+		close(fd);
+		remove(tpath);
+	}
+	else
+	{
+		close(fd);
+	}
+
+	return bytes_read;
 }
 
 static int efs_write(const char *path, const char *buf, size_t size,
 		     off_t offset, struct fuse_file_info *fi)
 {
+	// printf("%d\n", offset);
 	int fd;
 	int start, end;
 	int valsize;
@@ -365,7 +389,8 @@ static int efs_write(const char *path, const char *buf, size_t size,
 	fclose(fp_out);
 	fclose(fp_in);
 	// close(fd);
-	return end - start;
+	printf("%d\n", end-start);
+	return size;
 }
 
 static int efs_statfs(const char *path, struct statvfs *stbuf)
@@ -494,6 +519,8 @@ static struct fuse_operations efs_oper = {
 #endif
 };
 
+#define TMP_DIR "/tmp/efs"
+
 int main(int argc, char *argv[])
 {
 	umask(0);
@@ -502,9 +529,15 @@ int main(int argc, char *argv[])
 	if (argc < 3)
 	{
 		printf("error\n");
-		return;
+		return -1;
 	}
 	efs_data->root_dir = realpath(argv[argc-2], NULL);
+	efs_data->tmp_dir = TMP_DIR;
+	opendir(TMP_DIR);
+	if (errno == ENOENT)
+	{
+		mkdir(TMP_DIR, 0777);
+	}
     argv[argc-2] = argv[argc-1];
     argv[argc-1] = NULL;
     argc--;
