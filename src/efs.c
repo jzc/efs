@@ -56,6 +56,7 @@
 typedef struct {
 	char* root_dir;
 	char* tmp_dir;
+	char *key;
 } efs_data_t;
 
 #define EFS_DATA ((efs_data_t *) fuse_get_context()->private_data)
@@ -335,7 +336,7 @@ static int efs_read(const char *path, char *buf, size_t size, off_t offset,
 	{
 		fp_in = fopen(fpath, "r");
 		fp_out = fopen(tpath, "w");
-		do_crypt(fp_in, fp_out, mode, "abc");	
+		do_crypt(fp_in, fp_out, mode, EFS_DATA->key);	
 		fclose(fp_in);
 		fclose(fp_out);
 	}
@@ -388,7 +389,7 @@ static int efs_write(const char *path, const char *buf, size_t size,
 		fp_in = fopen(fpath, "r");
 		fp_out = fopen(tpath, "w");
 
-		do_crypt(fp_in, fp_out, 0, "abc");
+		do_crypt(fp_in, fp_out, 0, EFS_DATA->key);
 
 		fclose(fp_in);
 		fclose(fp_out);
@@ -408,7 +409,7 @@ static int efs_write(const char *path, const char *buf, size_t size,
 		fp_in = fopen(tpath, "r");
 		fp_out = fopen(fpath, "w");
 
-		do_crypt(fp_in, fp_out, 1, "abc");
+		do_crypt(fp_in, fp_out, 1, EFS_DATA->key);
 
 		fclose(fp_in);
 		fclose(fp_out);
@@ -501,7 +502,7 @@ static int efs_setxattr(const char *path, const char *name, const char *value,
 		//do crypt
 		fp_in = fopen(fpath, "r");
 		fp_out = fopen(tpath, "w");
-		do_crypt(fp_in, fp_out, mode, "abc");
+		do_crypt(fp_in, fp_out, mode, EFS_DATA->key);
 		fclose(fp_in);
 		fclose(fp_out);
 
@@ -509,7 +510,7 @@ static int efs_setxattr(const char *path, const char *name, const char *value,
 		//copy file
 		fp_in = fopen(tpath, "r");
 		fp_out = fopen(fpath, "w");
-		do_crypt(fp_in, fp_out, -1, "abc");
+		do_crypt(fp_in, fp_out, -1, EFS_DATA->key);
 		fclose(fp_in);
 		fclose(fp_out);
 
@@ -592,9 +593,9 @@ int main(int argc, char *argv[])
 	umask(0);
 	efs_data_t *efs_data;
 	efs_data = malloc(sizeof(efs_data_t));
-	if (argc < 3)
+	if (argc < 4)
 	{
-		printf("error\n");
+		printf("Usage: %s <encryption key> <mirror directory> <mount directory>\n", argv[0]);;
 		return -1;
 	}
 	efs_data->root_dir = realpath(argv[argc-2], NULL);
@@ -604,8 +605,9 @@ int main(int argc, char *argv[])
 	{
 		mkdir(TMP_DIR, 0777);
 	}
-    argv[argc-2] = argv[argc-1];
-    argv[argc-1] = NULL;
-    argc--;
+	efs_data->key = argv[argc-3];
+    argv[argc-3] = argv[argc-1];
+    argv[argc-2] = NULL;
+    argc -= 2;
 	return fuse_main(argc, argv, &efs_oper, efs_data);
 }
