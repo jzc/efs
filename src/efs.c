@@ -49,6 +49,7 @@
 #include <limits.h>
 #ifdef HAVE_SETXATTR
 #include <sys/xattr.h>
+#include <attr/xattr.h>
 #endif
 
 #include "aes-crypt.h"
@@ -323,7 +324,14 @@ static int efs_read(const char *path, char *buf, size_t size, off_t offset,
 
 	char attr[128];
 	valsize = getxattr(fpath, "user.encrypted", attr, 128);
-	attr[valsize] = '\0';
+	if (valsize == -1 && errno == ENOATTR)
+	{
+		strcpy(attr, "0");
+	}
+	else
+	{
+		attr[valsize] = '\0';
+	}
 	if (strcmp(attr, "0") == 0)
 	{
 		mode = -1;
@@ -366,7 +374,14 @@ static int efs_write(const char *path, const char *buf, size_t size,
 
 	efs_fullpath(fpath, path);
 	valsize = getxattr(fpath, "user.encrypted", attr, 128);
-	attr[valsize] = '\0';
+	if (valsize == -1 && errno == ENOATTR)
+	{
+		strcpy(attr, "0");
+	}
+	else
+	{
+		attr[valsize] = '\0';
+	}
 	if (strcmp(attr, "0") == 0) 
 	{
 		fd = open(fpath, O_WRONLY);
