@@ -343,14 +343,11 @@ static int efs_read(const char *path, char *buf, size_t size, off_t offset,
 	fd = open(tpath, O_RDONLY);
 	bytes_read = pread(fd, buf, size, offset);
 	
-	if ((long)(offset+size+1) >= lseek(fd, 0, SEEK_END))
+	long fs = lseek(fd, 0, SEEK_END);
+	close(fd);
+	if ((long)(offset+size+1) >= fs)
 	{
-		close(fd);
 		remove(tpath);
-	}
-	else
-	{
-		close(fd);
 	}
 
 	return bytes_read;
@@ -359,38 +356,38 @@ static int efs_read(const char *path, char *buf, size_t size, off_t offset,
 static int efs_write(const char *path, const char *buf, size_t size,
 		     off_t offset, struct fuse_file_info *fi)
 {
-	// printf("%d\n", offset);
-	int fd;
-	int start, end;
-	int valsize;
-	int mode = 1;
-
+	// printf("size: %d\n", size);
+	// printf("offset: %d\n", offset);
 	(void) fi;
-	char attr[128];
+
 	char fpath[PATH_MAX];
 	efs_fullpath(fpath, path);
-	valsize = getxattr(fpath, "user.encrypted", attr, 128);
-	attr[valsize] = '\0';
-	if (strcmp(attr, "0") == 0)
-	{
-		mode = -1;
-	}
-	fd = open(fpath, O_WRONLY);
-	if (fd == -1)
-		return -errno;
-	FILE *fp_in = fmemopen( (void *)buf, size, "r");
-	FILE *fp_out = fdopen(fd, "w");
-	start = ftell(fp_out);
-	if (!do_crypt(fp_in, fp_out, mode, "abc"))
-	{
-		return -errno;
-	}
-	end = ftell(fp_out);
-	fclose(fp_out);
+	char tpath[PATH_MAX];
+	efs_temppath(tpath, path);
+
+	FILE *fp_in = fopen(fpath, "r");
+	FILE *fp_out = fopen(tpath, "w");
+
+	do_crypt(fp_in, fp_out, 0, "abc");
+
 	fclose(fp_in);
-	// close(fd);
-	printf("%d\n", end-start);
-	return size;
+	fclose(fp_out);
+
+	int fd = open(tpath, O_WRONLY);
+	int res = pwrite(fd, buf, size, offset);
+
+	close(fd);
+
+	fp_in = fopen(tpath, "r");
+	fp_out = fopen(fpath, "w");
+
+	do_crypt(fp_in, fp_out, 1, "abc");
+
+	fclose(fp_in);
+	fclose(fp_out);
+
+	return res;
+	
 }
 
 static int efs_statfs(const char *path, struct statvfs *stbuf)
