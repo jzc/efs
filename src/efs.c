@@ -438,6 +438,7 @@ static int efs_create(const char* path, mode_t mode, struct fuse_file_info* fi) 
     res = creat(fpath, mode);
     if(res == -1)
 	return -errno;
+	setxattr(fpath, "user.encrypted", "1", sizeof("1"), 0);
 
     close(res);
 
@@ -472,7 +473,49 @@ static int efs_setxattr(const char *path, const char *name, const char *value,
 			size_t size, int flags)
 {
 	char fpath[PATH_MAX];
+	char tpath[PATH_MAX];
+	char attr[128];
+	int mode, valsize, enc = 0;
+	FILE *fp_in, *fp_out;
 	efs_fullpath(fpath, path);
+
+	efs_temppath(tpath, path);
+	valsize = getxattr(fpath, "user.encrypted", attr, 128);
+	attr[valsize] = '\0';
+	//encrypt their file
+	if ((strcmp(attr, "0") == 0) && (strcmp(value, "1") == 0))
+	{
+		mode = 1;	
+		enc = 1;
+	}
+	//decrypt their file
+	else if ((strcmp(attr, "1") == 0) && (strcmp(value, "0") == 0))
+	{
+		mode = 0;
+		enc = 1;
+	}
+	
+
+	if ((strcmp(name, "user.encrypted") == 0) && enc)
+	{
+		//do crypt
+		fp_in = fopen(fpath, "r");
+		fp_out = fopen(tpath, "w");
+		do_crypt(fp_in, fp_out, mode, "abc");
+		fclose(fp_in);
+		fclose(fp_out);
+
+
+		//copy file
+		fp_in = fopen(tpath, "r");
+		fp_out = fopen(fpath, "w");
+		do_crypt(fp_in, fp_out, -1, "abc");
+		fclose(fp_in);
+		fclose(fp_out);
+
+		remove(tpath);
+	}
+
 	int res = lsetxattr(fpath, name, value, size, flags);
 	if (res == -1)
 		return -errno;
